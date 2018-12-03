@@ -15,14 +15,14 @@
 #define BUFFER_SIZE 129
 #define MAX_CLIENTS 3
 #define WORD_LIST "./hangman_words.txt"
-#define LOSE_STRING "You Lose."
-#define WIN_STRING "You Win!"
+#define LOSE_STRING "You Lose.\n"
+#define WIN_STRING "You Win!\n"
 #define GAME_OVER_STRING "Game Over!"
 #define OVERLOADED_STRING "server-overloaded"
 #define WORD_WAS_STRING "The word was "
 
-char WIN_STRING_SIZE = 8;
-char LOSE_STRING_SIZE = 9;
+char LOSE_STRING_SIZE = 10;
+char WIN_STRING_SIZE = 9;
 char GAME_OVER_STRING_SIZE = 10;
 char OVERLOADED_STRING_SIZE = 17;
 char WORD_WAS_STRING_SIZE = 13;
@@ -53,13 +53,14 @@ int main(int argc, char** argv)
 
   for (int i = 0; i < 15; ++i)
   {
-    words[i] = malloc(9 * sizeof(char));
+    words[i] = malloc(9);
   }
 
   for (int i = 0; i < 3; ++i)
   {
-    client_strings[i] = malloc(9 * sizeof(char));
-    client_wrong_guesses[i] = malloc(7 * sizeof(char));
+    client_strings[i] = malloc(9);
+
+    client_wrong_guesses[i] = malloc(7);
   }
 
 
@@ -80,17 +81,20 @@ int main(int argc, char** argv)
 
   fclose(file);
 
-  int master_sockfd, client_sockfds[3], cli_sockfd;
+  int master_sockfd, client_sockfds[3] = {0}, cli_sockfd;
   struct sockaddr_in address;
   int port = strtol(argv[1], (char **)NULL, 10);
 
   fd_set read_fds;
   int max_sd;
+  char msg_size;
 
-  int num_clients = 0, sock_activity, recv_size, msg_len;
+  int num_clients = 0, sock_activity, recv_size, msg_len, found;
 
-  char in_buffer[BUFFER_SIZE];
-  char out_buffer[BUFFER_SIZE];
+  char buffer[BUFFER_SIZE];
+
+  memset(buffer, '\0', 129);
+  //memset(client_sockfds, 0, 3);
 
   if ((master_sockfd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
   {
@@ -104,7 +108,6 @@ int main(int argc, char** argv)
   address.sin_addr.s_addr = htonl(INADDR_ANY);
   address.sin_port = htons(port);
 
-
   if (setsockopt(
           master_sockfd,
           SOL_SOCKET,
@@ -114,7 +117,6 @@ int main(int argc, char** argv)
     perror("Failed to set socket as reusable");
     exit(EXIT_FAILURE);
   }
-
 
   if (bind(
           master_sockfd,
@@ -131,7 +133,6 @@ int main(int argc, char** argv)
     exit(EXIT_FAILURE);
   }
 
-
   int addr_len = sizeof(address);
 
   while(1)
@@ -141,7 +142,6 @@ int main(int argc, char** argv)
     FD_SET(master_sockfd, &read_fds);
 
     max_sd = master_sockfd;
-
 
     for(int i = 0; i < MAX_CLIENTS; ++i)
     {
@@ -183,15 +183,19 @@ int main(int argc, char** argv)
             client_sockfds[i] = cli_sockfd;
 
             int rand_val = rand() % num_words;
+
             int word_len = strlen(words[rand_val]);
 
             client_words[i] = rand_val;
 
             memset(client_wrong_guesses[i], '\0', sizeof(char) * 7);
+
             memset(client_strings[i], '_', sizeof(char) * word_len);
-            printf("%s\n", client_strings[i]);
-            memset(client_strings[i] + word_len, '\0', sizeof(char) * (9 - word_len));
-            printf("%s\n", client_strings[i]);
+
+            memset(
+                client_strings[i] + word_len,
+                '\0',
+                sizeof(char) * (9 - word_len));
 
             num_clients++;
 
@@ -204,6 +208,7 @@ int main(int argc, char** argv)
       else
       {
         send(cli_sockfd, &OVERLOADED_STRING_SIZE, 1, 0);
+
         send(cli_sockfd, OVERLOADED_STRING, OVERLOADED_STRING_SIZE, 0);
       }
     }
@@ -212,33 +217,33 @@ int main(int argc, char** argv)
     {
       if (FD_ISSET(client_sockfds[i], &read_fds))
       {
-        if ((recv_size = recv(client_sockfds[i], in_buffer, 1, 0)) == 0)
+        if ((recv_size = recv(client_sockfds[i], buffer, 1, 0)) == 0)
         {
           close(client_sockfds[i]);
-          FD_CLR(client_sockfds[i], &read_fds);
+
+          client_sockfds[i] = 0;
+
           num_clients--;
         }
         else
         {
-          msg_len = in_buffer[0];
+          msg_len = buffer[0];
 
           if (msg_len == 0)
           {
             break;
           }
 
-          recv(client_sockfds[i], in_buffer, msg_len, 0);
-          in_buffer[msg_len] = '\0';
+          recv(client_sockfds[i], buffer, msg_len, 0);
 
-          printf("%s\n", client_strings[i]);
+          buffer[msg_len] = '\0';
 
-          printf("debug5\n");
+          found = 0;
 
-          int found = replace_chars(client_strings[i], words[client_words[i]], in_buffer[0]);
-
-          printf("debug6\n");
-
-          printf("%s\n", client_strings[i]);
+          if (strchr(client_strings[i], buffer[0]) == NULL)
+          {
+            found = replace_chars(client_strings[i], words[client_words[i]], buffer[0]);
+          }
 
           if (found == 0)
           {
@@ -246,7 +251,8 @@ int main(int argc, char** argv)
             {
               if (client_wrong_guesses[i][idx] == '\0')
               {
-                client_wrong_guesses[i][idx] = in_buffer[0];
+                client_wrong_guesses[i][idx] = buffer[0];
+
                 break;
               }
             }
@@ -254,27 +260,50 @@ int main(int argc, char** argv)
 
           if (strlen(client_wrong_guesses[i]) > 5)
           {
-            send(client_sockfds[i], &LOSE_STRING_SIZE, 1, 0);
+            msg_size = LOSE_STRING_SIZE + GAME_OVER_STRING_SIZE;
+
+            send(client_sockfds[i], &msg_size, 1, 0);
+
             send(client_sockfds[i], LOSE_STRING, LOSE_STRING_SIZE, 0);
 
-            send(client_sockfds[i], &GAME_OVER_STRING_SIZE, 1, 0);
             send(client_sockfds[i], GAME_OVER_STRING, GAME_OVER_STRING_SIZE, 0);
+
+            close(client_sockfds[i]);
+
+            client_sockfds[i] = 0;
+
+            num_clients--;
           }
           else if (strcmp(words[client_words[i]], client_strings[i]) == 0)
           {
-            int word_msg_size = WORD_WAS_STRING_SIZE + strlen(client_strings[i]);
+            int msg_size =
+                WORD_WAS_STRING_SIZE +
+                strlen(client_strings[i]) +
+                1 +
+                WIN_STRING_SIZE +
+                GAME_OVER_STRING_SIZE;
 
-            send(client_sockfds[i], &word_msg_size, 1, 0);
+            send(client_sockfds[i], &msg_size, 1, 0);
+
+            send(client_sockfds[i], WORD_WAS_STRING, WORD_WAS_STRING_SIZE, 0);
+
             send(
                 client_sockfds[i],
-                *WORD_WAS_STRING + client_strings[i],
-                word_msg_size, 0);
+                client_strings[i],
+                strlen(client_strings[i]),
+                0);
 
-            send(client_sockfds[i], &WIN_STRING_SIZE, 1, 0);
+            send(client_sockfds[i], "\n", 1, 0);
+
             send(client_sockfds[i], WIN_STRING, WIN_STRING_SIZE, 0);
 
-            send(client_sockfds[i], &GAME_OVER_STRING_SIZE, 1, 0);
             send(client_sockfds[i], GAME_OVER_STRING, GAME_OVER_STRING_SIZE, 0);
+
+            close(client_sockfds[i]);
+
+            client_sockfds[i] = 0;
+
+            num_clients--;
           }
           else
           {
@@ -282,11 +311,18 @@ int main(int argc, char** argv)
             int num_wrong_guesses = strlen(client_wrong_guesses[i]);
 
             send(client_sockfds[i], &ZERO, 1, 0);
+
             send(client_sockfds[i], &word_len, 1, 0);
+
             send(client_sockfds[i], &num_wrong_guesses, 1, 0);
 
             send(client_sockfds[i], client_strings[i], word_len, 0);
-            send(client_sockfds[i], client_wrong_guesses[i], num_wrong_guesses, 0);
+
+            send(
+                client_sockfds[i],
+                client_wrong_guesses[i],
+                num_wrong_guesses,
+                0);
           }
 
         }
@@ -299,15 +335,13 @@ int replace_chars(char* cur_str, char* word, char c)
 {
   int found = 0;
 
-  printf("funcdebug1\n");
   for (int i = 0; i < strlen(word); ++i)
   {
     if (word[i] == c)
     {
-      printf("funcdebug2\n");
       cur_str[i] = c;
+
       found = 1;
-      printf("funcdebug3\n");
     }
   }
 

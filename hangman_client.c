@@ -28,11 +28,9 @@ int main(int argc, char** argv)
   struct sockaddr_in serv_addr;
   int port = strtol(argv[2], (char **)NULL, 10);
 
-  char buffer[BUFFER_SIZE];
+  char buffer[BUFFER_SIZE] = {0};
 
   int recv_size, recv_val, word_len, num_incorrect;
-
-  printf("debug1\n");
 
   if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
   {
@@ -46,25 +44,23 @@ int main(int argc, char** argv)
   serv_addr.sin_port = htons(port);
   serv_addr.sin_addr.s_addr = inet_addr(argv[1]);
 
-  printf("debug2\n");
-
   if (connect(sockfd, (struct sockaddr *)& serv_addr, sizeof(serv_addr)) != 0)
   {
     perror("Failed to connect to server");
     exit(EXIT_FAILURE);
   }
 
-  printf("debug3\n");
-
   recv_size = recv(sockfd, (char *)& buffer, 1, 0);
-
-  printf("debug4\n");
 
   recv_val = buffer[0];
 
   if (recv_val > 0)
   {
-    recv(sockfd, (char *)& buffer, recv_val, 0);
+    recv(sockfd, buffer, recv_val, 0);
+
+    buffer[recv_val] = '\0';
+
+    printf("%s", buffer);
 
     return 1;
   }
@@ -103,9 +99,10 @@ int main(int argc, char** argv)
     if (strlen(buffer) == 1 && isalpha(buffer[0]))
     {
       buffer[1] = tolower(buffer[0]);
+
       buffer[0] = 1;
 
-      send(sockfd, (char *)& buffer, 2, 0);
+      send(sockfd, buffer, 2, 0);
 
       recv(sockfd, buffer, 1, 0);
 
@@ -115,34 +112,44 @@ int main(int argc, char** argv)
       {
         // Word Length
         recv(sockfd, buffer, 1, 0);
+
         word_len = buffer[0];
 
         // Num Incorrect
         recv(sockfd, buffer, 1, 0);
+
         num_incorrect = buffer[0];
 
         // Word
         recv(sockfd, buffer, word_len, 0);
+
         buffer[word_len] = '\0';
+
         printf("%s\n", buffer);
 
         // Incorrect Guesses
-        recv(sockfd, buffer, num_incorrect, 0);
-        buffer[num_incorrect] = '\0';
-        printf("Incorrect Guesses: %s\n\n", buffer);
+        printf("Incorrect Guesses: ");
+
+        if (num_incorrect > 0)
+        {
+          recv(sockfd, buffer, num_incorrect, 0);
+
+          buffer[num_incorrect] = '\0';
+
+          printf("%s", buffer);
+        }
+
+        printf("\n\n");
       }
       else
       {
         recv(sockfd, buffer, recv_val, 0);
+
         buffer[recv_val] = '\0';
+
         printf("%s\n", buffer);
 
-        if (strcmp(buffer, "Game Over!") == 0)
-        {
-          close(sockfd);
-
-          return 0;
-        }
+        return 0;
       }
 
     }
