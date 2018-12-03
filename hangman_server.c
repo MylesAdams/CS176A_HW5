@@ -10,24 +10,25 @@
 #include <string.h>
 #include <errno.h>
 #include <unistd.h>
+#include <time.h>
 
 #define BUFFER_SIZE 129
 #define MAX_CLIENTS 3
 #define WORD_LIST "./hangman_words.txt"
-#define WIN_STRING "You Win!"
 #define LOSE_STRING "You Lose."
+#define WIN_STRING "You Win!"
 #define GAME_OVER_STRING "Game Over!"
 #define OVERLOADED_STRING "server-overloaded"
 #define WORD_WAS_STRING "The word was "
-#define WIN_STRING_SIZE 8
-#define LOSE_STRING_SIZE 9
-#define GAME_OVER_STRING_SIZE 10
-#define OVERLOADED_STRING_SIZE 17
-#define WORD_WAS_STRING_SIZE 13
 
-int ZERO = 0;
+char WIN_STRING_SIZE = 8;
+char LOSE_STRING_SIZE = 9;
+char GAME_OVER_STRING_SIZE = 10;
+char OVERLOADED_STRING_SIZE = 17;
+char WORD_WAS_STRING_SIZE = 13;
+char ZERO = 0;
 
-int replace_chars(char** cur_str, char* word, char c);
+int replace_chars(char* cur_str, char* word, char c);
 
 int main(int argc, char** argv)
 {
@@ -49,7 +50,6 @@ int main(int argc, char** argv)
   char* client_strings[3];
   char* client_wrong_guesses[3];
 
-  printf("debug1\n");
 
   for (int i = 0; i < 15; ++i)
   {
@@ -62,7 +62,6 @@ int main(int argc, char** argv)
     client_wrong_guesses[i] = malloc(7 * sizeof(char));
   }
 
-  printf("debug2\n");
 
   file = fopen(WORD_LIST, "r");
 
@@ -76,12 +75,10 @@ int main(int argc, char** argv)
   {
     line[strcspn(line, "\n")] = 0;
 
-    words[num_words++] = line;
+    strncpy(words[num_words++], line, strlen(line) + 1);
   }
 
   fclose(file);
-
-  printf("debug3\n");
 
   int master_sockfd, client_sockfds[3], cli_sockfd;
   struct sockaddr_in address;
@@ -107,7 +104,6 @@ int main(int argc, char** argv)
   address.sin_addr.s_addr = htonl(INADDR_ANY);
   address.sin_port = htons(port);
 
-  printf("debug4\n");
 
   if (setsockopt(
           master_sockfd,
@@ -119,7 +115,6 @@ int main(int argc, char** argv)
     exit(EXIT_FAILURE);
   }
 
-  printf("debug5\n");
 
   if (bind(
           master_sockfd,
@@ -136,7 +131,6 @@ int main(int argc, char** argv)
     exit(EXIT_FAILURE);
   }
 
-  printf("debug6\n");
 
   int addr_len = sizeof(address);
 
@@ -148,7 +142,6 @@ int main(int argc, char** argv)
 
     max_sd = master_sockfd;
 
-    printf("debug7\n");
 
     for(int i = 0; i < MAX_CLIENTS; ++i)
     {
@@ -163,11 +156,7 @@ int main(int argc, char** argv)
       }
     }
 
-    printf("debug8\n");
-
     sock_activity = select(max_sd + 1, &read_fds, NULL, NULL, NULL);
-
-    printf("debug9\n");
 
     if ((sock_activity < 0) && (errno != EINTR))
     {
@@ -200,25 +189,23 @@ int main(int argc, char** argv)
 
             memset(client_wrong_guesses[i], '\0', sizeof(char) * 7);
             memset(client_strings[i], '_', sizeof(char) * word_len);
+            printf("%s\n", client_strings[i]);
             memset(client_strings[i] + word_len, '\0', sizeof(char) * (9 - word_len));
+            printf("%s\n", client_strings[i]);
 
             num_clients++;
 
-            printf("debug10\n");
-            char c = 0;
             send(cli_sockfd, &ZERO, 1, 0);
 
-            printf("debug11\n");
             break;
           }
         }
       }
       else
       {
-        send(cli_sockfd, (char*)OVERLOADED_STRING_SIZE, 1, 0);
-        send(cli_sockfd, (char *)& OVERLOADED_STRING, OVERLOADED_STRING_SIZE, 0);
+        send(cli_sockfd, &OVERLOADED_STRING_SIZE, 1, 0);
+        send(cli_sockfd, OVERLOADED_STRING, OVERLOADED_STRING_SIZE, 0);
       }
-
     }
 
     for (int i = 0; i < MAX_CLIENTS; ++i)
@@ -235,13 +222,19 @@ int main(int argc, char** argv)
         {
           in_buffer[1] = '\0';
 
-          msg_len = strtol(in_buffer, (char **)NULL, 10);
+          msg_len = in_buffer[0];
 
           recv(client_sockfds[i], in_buffer, msg_len, 0);
           in_buffer[msg_len] = '\0';
 
           printf("%s\n", client_strings[i]);
-          int found = replace_chars(&client_strings[i], words[client_words[i]], in_buffer[0]);
+
+          printf("debug5\n");
+
+          int found = replace_chars(client_strings[i], words[client_words[i]], in_buffer[0]);
+
+          printf("debug6\n");
+
           printf("%s\n", client_strings[i]);
 
           if (found == 0)
@@ -258,10 +251,10 @@ int main(int argc, char** argv)
 
           if (strlen(client_wrong_guesses[i]) > 5)
           {
-            send(client_sockfds[i], (char *)LOSE_STRING_SIZE, 1, 0);
+            send(client_sockfds[i], &LOSE_STRING_SIZE, 1, 0);
             send(client_sockfds[i], LOSE_STRING, LOSE_STRING_SIZE, 0);
 
-            send(client_sockfds[i], (char *)GAME_OVER_STRING_SIZE, 1, 0);
+            send(client_sockfds[i], &GAME_OVER_STRING_SIZE, 1, 0);
             send(client_sockfds[i], GAME_OVER_STRING, GAME_OVER_STRING_SIZE, 0);
           }
           else if (strcmp(words[client_words[i]], client_strings[i]) == 0)
@@ -274,17 +267,18 @@ int main(int argc, char** argv)
                 *WORD_WAS_STRING + client_strings[i],
                 word_msg_size, 0);
 
-            send(client_sockfds[i], (char *)WIN_STRING_SIZE, 1, 0);
+            send(client_sockfds[i], &WIN_STRING_SIZE, 1, 0);
             send(client_sockfds[i], WIN_STRING, WIN_STRING_SIZE, 0);
 
-            send(client_sockfds[i], (char *)GAME_OVER_STRING_SIZE, 1, 0);
+            send(client_sockfds[i], &GAME_OVER_STRING_SIZE, 1, 0);
             send(client_sockfds[i], GAME_OVER_STRING, GAME_OVER_STRING_SIZE, 0);
           }
           else
           {
             int word_len = strlen(client_strings[i]);
             int num_wrong_guesses = strlen(client_wrong_guesses[i]);
-            send(client_sockfds[i], (char *)0, 1, 0);
+
+            send(client_sockfds[i], &ZERO, 1, 0);
             send(client_sockfds[i], &word_len, 1, 0);
             send(client_sockfds[i], &num_wrong_guesses, 1, 0);
 
@@ -298,16 +292,19 @@ int main(int argc, char** argv)
   }
 }
 
-int replace_chars(char** cur_str, char* word, char c)
+int replace_chars(char* cur_str, char* word, char c)
 {
   int found = 0;
 
+  printf("funcdebug1\n");
   for (int i = 0; i < strlen(word); ++i)
   {
-    if (*(word + i) == c)
+    if (word[i] == c)
     {
-      *(*cur_str + i) = c;
+      printf("funcdebug2\n");
+      cur_str[i] = c;
       found = 1;
+      printf("funcdebug3\n");
     }
   }
 
