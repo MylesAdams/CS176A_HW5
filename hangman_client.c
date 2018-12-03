@@ -14,6 +14,8 @@
 
 #define BUFFER_SIZE 129
 
+char ZERO = 0;
+
 int main(int argc, char** argv)
 {
   if (argc < 3)
@@ -75,7 +77,7 @@ int main(int argc, char** argv)
 
     if (buffer[0] == 'y')
     {
-      send(sockfd, "0", 1, 0);
+      send(sockfd, &ZERO, 1, 0);
       break;
     }
     else if (buffer[0] == 'n')
@@ -101,7 +103,7 @@ int main(int argc, char** argv)
     if (strlen(buffer) == 1 && isalpha(buffer[0]))
     {
       buffer[1] = tolower(buffer[0]);
-      buffer[0] = '1';
+      buffer[0] = 1;
 
       send(sockfd, (char *)& buffer, 2, 0);
 

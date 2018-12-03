@@ -220,9 +220,12 @@ int main(int argc, char** argv)
         }
         else
         {
-          in_buffer[1] = '\0';
-
           msg_len = in_buffer[0];
+
+          if (msg_len == 0)
+          {
+            break;
+          }
 
           recv(client_sockfds[i], in_buffer, msg_len, 0);
           in_buffer[msg_len] = '\0';
@@ -239,7 +242,7 @@ int main(int argc, char** argv)
 
           if (found == 0)
           {
-            for (int idx = 0; i < 7; ++i)
+            for (int idx = 0; idx < 7; ++idx)
             {
               if (client_wrong_guesses[i][idx] == '\0')
               {
