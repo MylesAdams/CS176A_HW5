@@ -81,7 +81,13 @@ int main(int argc, char** argv)
 
   fclose(file);
 
-  int master_sockfd, client_sockfds[3] = {0}, cli_sockfd;
+  if (num_words == 0)
+  {
+    printf("No words in hangman_words.txt\n");
+    return 1;
+  }
+
+  int master_sockfd, client_sockfds[3] = {0}, cli_sockfd, client_games_started[3];
   struct sockaddr_in address;
   int port = strtol(argv[1], (char **)NULL, 10);
 
@@ -89,7 +95,7 @@ int main(int argc, char** argv)
   int max_sd;
   char msg_size;
 
-  int num_clients = 0, sock_activity, recv_size, msg_len, found;
+  int num_clients = 0, sock_activity, msg_len, found;
 
   char buffer[BUFFER_SIZE];
 
@@ -199,7 +205,13 @@ int main(int argc, char** argv)
 
             num_clients++;
 
-            send(cli_sockfd, &ZERO, 1, 0);
+            send(client_sockfds[i], &ZERO, 1, 0);
+
+            send(client_sockfds[i], &word_len, 1, 0);
+
+            send(client_sockfds[i], &ZERO, 1, 0);
+
+            send(client_sockfds[i], client_strings[i], word_len, 0);
 
             break;
           }
@@ -217,11 +229,13 @@ int main(int argc, char** argv)
     {
       if (FD_ISSET(client_sockfds[i], &read_fds))
       {
-        if ((recv_size = recv(client_sockfds[i], buffer, 1, 0)) == 0)
+        if (recv(client_sockfds[i], buffer, 1, 0) == 0)
         {
           close(client_sockfds[i]);
 
           client_sockfds[i] = 0;
+
+          client_games_started[i] = 0;
 
           num_clients--;
         }
@@ -229,31 +243,29 @@ int main(int argc, char** argv)
         {
           msg_len = buffer[0];
 
-          if (msg_len == 0)
+          if (msg_len != 0)
           {
-            break;
-          }
+            recv(client_sockfds[i], buffer, msg_len, 0);
 
-          recv(client_sockfds[i], buffer, msg_len, 0);
+            buffer[msg_len] = '\0';
 
-          buffer[msg_len] = '\0';
+            found = 0;
 
-          found = 0;
-
-          if (strchr(client_strings[i], buffer[0]) == NULL)
-          {
-            found = replace_chars(client_strings[i], words[client_words[i]], buffer[0]);
-          }
-
-          if (found == 0)
-          {
-            for (int idx = 0; idx < 7; ++idx)
+            if (strchr(client_strings[i], buffer[0]) == NULL)
             {
-              if (client_wrong_guesses[i][idx] == '\0')
-              {
-                client_wrong_guesses[i][idx] = buffer[0];
+              found = replace_chars(client_strings[i], words[client_words[i]], buffer[0]);
+            }
 
-                break;
+            if (found == 0)
+            {
+              for (int idx = 0; idx < 7; ++idx)
+              {
+                if (client_wrong_guesses[i][idx] == '\0')
+                {
+                  client_wrong_guesses[i][idx] = buffer[0];
+
+                  break;
+                }
               }
             }
           }
@@ -271,6 +283,8 @@ int main(int argc, char** argv)
             close(client_sockfds[i]);
 
             client_sockfds[i] = 0;
+
+            client_games_started[i] = 0;
 
             num_clients--;
           }
@@ -303,26 +317,35 @@ int main(int argc, char** argv)
 
             client_sockfds[i] = 0;
 
+            client_games_started[i] = 0;
+
             num_clients--;
           }
           else
           {
-            int word_len = strlen(client_strings[i]);
-            int num_wrong_guesses = strlen(client_wrong_guesses[i]);
+            if (client_games_started[i] == 1)
+            {
+              int word_len = strlen(client_strings[i]);
+              int num_wrong_guesses = strlen(client_wrong_guesses[i]);
 
-            send(client_sockfds[i], &ZERO, 1, 0);
+              send(client_sockfds[i], &ZERO, 1, 0);
 
-            send(client_sockfds[i], &word_len, 1, 0);
+              send(client_sockfds[i], &word_len, 1, 0);
 
-            send(client_sockfds[i], &num_wrong_guesses, 1, 0);
+              send(client_sockfds[i], &num_wrong_guesses, 1, 0);
 
-            send(client_sockfds[i], client_strings[i], word_len, 0);
+              send(client_sockfds[i], client_strings[i], word_len, 0);
 
-            send(
-                client_sockfds[i],
-                client_wrong_guesses[i],
-                num_wrong_guesses,
-                0);
+              send(
+                  client_sockfds[i],
+                  client_wrong_guesses[i],
+                  num_wrong_guesses,
+                  0);
+            }
+            else
+            {
+              client_games_started[i] = 1;
+            }
           }
 
         }
@@ -347,3 +370,4 @@ int replace_chars(char* cur_str, char* word, char c)
 
   return found;
 }
+
